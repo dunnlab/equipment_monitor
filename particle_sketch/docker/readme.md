@@ -5,7 +5,7 @@
 ### `docker build`
 
 ``` bash
-cd ~/repos/equipment_monitor/particle_firmware/docker/particle-cli
+cd ~/repos/equipment_monitor/particle_sketch/docker/particle-cli
 # for the latest version
 docker build -t particle-cli .
 # for some specific particle-cli version (e.g. 2.0.1)
@@ -18,19 +18,19 @@ To start:
 
 ``` bash
 docker run --rm -ti -e USERID=$UID \
-           -v ~/repos/equipment_monitor/particle_firmware:/particle_firmware \
+           -v ~/repos/equipment_monitor/particle_sketch:/particle_sketch \
            -v ~/.particle:/root/.particle \
-           particle-cli
+           particle-cli bash
 ```
 
-- Replace `~/repos/equipment_monitor/particle_firmware` with wherever you have stored `equipment_monitor` on your machine.
+- Replace `~/repos/equipment_monitor/particle_sketch` with wherever you have stored `equipment_monitor` on your machine.
 - Remove the ~/.particle mount if you want to log in every time you start the container
 - remember to login with `particle login`
 
 To build:
 
 ```bash
-cd /particle_firmware
+cd /particle_sketch
 particle compile -v xenon --saveTo xenon.bin
 particle compile -v boron --saveTo boron.bin
 ```
