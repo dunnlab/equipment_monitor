@@ -146,7 +146,7 @@ void setup() {
 	Particle.function("SetAlarmTMax", write_alarm_temp_max);
 	Particle.function("SetAlarmTMin", write_alarm_temp_min);
 
-
+	pinMode( LED_A, OUTPUT );
 	pinMode( LED_B, OUTPUT );
 
 	pinMode( ALARM_NO_PIN, INPUT_PULLUP );
@@ -190,7 +190,7 @@ void loop() {
 	if (millis() - lastUpdate >= UPDATE_PERIOD_MS) {
 		// alternate the LED between high and low
 		// to show that we're still alive
-		digitalWrite(LED_B, (led_on_state) ? HIGH : LOW);
+		digitalWrite(LED_A, (led_on_state) ? HIGH : LOW);
 		led_on_state = !led_on_state;
 
 
