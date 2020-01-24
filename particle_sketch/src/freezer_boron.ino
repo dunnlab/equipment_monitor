@@ -83,7 +83,7 @@ bool amb_h_alarm = FALSE;
 bool amb_h_alarm_last = FALSE;
 
 bool fault_bme = FALSE;
-bool fault_thermocouple = FALSE;
+uint8_t fault_thermocouple = 0;
 bool BMEsensorReady = FALSE;
 
 
@@ -262,18 +262,29 @@ void loop() {
 		temp_tc_cj = maxthermo.readCJTemperature();
 
 		// Check and print any faults
-		fault_thermocouple = FALSE;
-		uint8_t fault = maxthermo.readFault();
-		if (fault) {
-			fault_thermocouple = TRUE;
-			if (fault & MAX31856_FAULT_CJRANGE) Particle.publish("FAULT_Thermo", "Cold Junction Range Fault", PRIVATE);
-			if (fault & MAX31856_FAULT_TCRANGE) Particle.publish("FAULT_Thermo", "Thermocouple Range Fault", PRIVATE);
-			if (fault & MAX31856_FAULT_CJHIGH)  Particle.publish("FAULT_Thermo", "Cold Junction High Fault", PRIVATE);
-			if (fault & MAX31856_FAULT_CJLOW)   Particle.publish("FAULT_Thermo", "Cold Junction Low Fault", PRIVATE);
-			if (fault & MAX31856_FAULT_TCHIGH)  Particle.publish("FAULT_Thermo", "Thermocouple High Fault", PRIVATE);
-			if (fault & MAX31856_FAULT_TCLOW)   Particle.publish("FAULT_Thermo", "Thermocouple Low Fault", PRIVATE);
-			if (fault & MAX31856_FAULT_OVUV)    Particle.publish("FAULT_Thermo", "Over/Under Voltage Fault", PRIVATE);
-			if (fault & MAX31856_FAULT_OPEN)    Particle.publish("FAULT_Thermo", "Thermocouple Open Fault", PRIVATE);
+		uint8_t current_fault = maxthermo.readFault();
+		if ( current_fault ) {
+
+			if( fault_thermocouple != current_fault ){ // Only publish the fault when it differs from previous fault state
+				if (current_fault & MAX31856_FAULT_CJRANGE) Particle.publish("FAULT_Thermo", "Cold Junction Range Fault", PRIVATE);
+				if (current_fault & MAX31856_FAULT_TCRANGE) Particle.publish("FAULT_Thermo", "Thermocouple Range Fault", PRIVATE);
+				if (current_fault & MAX31856_FAULT_CJHIGH)  Particle.publish("FAULT_Thermo", "Cold Junction High Fault", PRIVATE);
+				if (current_fault & MAX31856_FAULT_CJLOW)   Particle.publish("FAULT_Thermo", "Cold Junction Low Fault", PRIVATE);
+				if (current_fault & MAX31856_FAULT_TCHIGH)  Particle.publish("FAULT_Thermo", "Thermocouple High Fault", PRIVATE);
+				if (current_fault & MAX31856_FAULT_TCLOW)   Particle.publish("FAULT_Thermo", "Thermocouple Low Fault", PRIVATE);
+				if (current_fault & MAX31856_FAULT_OVUV)    Particle.publish("FAULT_Thermo", "Over/Under Voltage Fault", PRIVATE);
+				if (current_fault & MAX31856_FAULT_OPEN)    Particle.publish("FAULT_Thermo", "Thermocouple Open Fault", PRIVATE);
+			}
+
+			fault_thermocouple = current_fault;
+
+		}
+		else{
+			if( fault_thermocouple != current_fault ){
+				// Has gone from fault to no fault
+				Particle.publish("FAULT_Thermo", "No Thermocouple Fault", PRIVATE);
+				fault_thermocouple = current_fault;
+			}
 		}
 
 		// Update sensor alarms
