@@ -41,6 +41,9 @@
 #define LED_A D6
 #define LED_B D7
 
+// Enable system threading
+SYSTEM_THREAD(ENABLED);
+
 // public variables
 const unsigned long UPDATE_PERIOD_MS = 5000;
 unsigned long lastUpdate = 0;
@@ -106,10 +109,23 @@ Adafruit_SSD1306 display(128, 64, DISPLAY_RESET);
 int alarm_temp_min_address = 1;
 int alarm_temp_max_address = 5;
 
-
+void selectExternalMeshAntenna() {
+	// Per https://community.particle.io/t/xenon-mesh-external-antenna-enable/51424
+	#if (PLATFORM_ID == PLATFORM_ARGON)
+		digitalWrite(ANTSW1, 1);
+		digitalWrite(ANTSW2, 0);
+	#elif (PLATFORM_ID == PLATFORM_BORON)
+		digitalWrite(ANTSW1, 0);
+	#else
+		digitalWrite(ANTSW1, 0);
+	  digitalWrite(ANTSW2, 1);
+	#endif
+}
 
 
 void setup() {
+
+	selectExternalMeshAntenna();
 
 	Particle.variable( "temp_tc", &temp_tc, DOUBLE );
 	Particle.variable( "temp_tc_cj", &temp_tc_cj, DOUBLE );
@@ -139,8 +155,6 @@ void setup() {
 	alarm_temp_min = read_eeprom_temp( alarm_temp_min_address, -1000 );
 	alarm_temp_max = read_eeprom_temp( alarm_temp_max_address, 1000 );
 
-	Serial.begin( 9600 );
-
 	// Start sensors
 	maxthermo.begin();
 	maxthermo.setThermocoupleType(MAX31856_TCTYPE_K);
@@ -169,9 +183,6 @@ void setup() {
 	#endif
 
 	Particle.publish("BOARD", String(board_type), PRIVATE);
-
-
-
 
 }
 
