@@ -207,11 +207,15 @@ void loop() {
 		if( equip_alarm != equip_alarm_last ){
 			equip_alarm_last = equip_alarm;
 			if ( equip_alarm ){
-				Particle.publish("ALARM_EQIP", "ALARM: Equipment in alarm!!!", PRIVATE);
+				String data = String::format("{ \"message\": \"%s\", \"temp_tc\": %.1f, \"temp_amb\": %.1f, \"humid_amb\": %.0f,\"alarm_temp_min\": %.1f, \"alarm_temp_max\": %.1f }",
+ 						"equipment alarm", temp_tc, temp_amb, humid_amb, alarm_temp_min, alarm_temp_max);
+				Particle.publish("ALARM", data, PRIVATE);
 			}
 			else
 			{
-				Particle.publish("ALARM_EQIP", "CLEAR: Equipment alarm stopped.", PRIVATE);
+				String data = String::format("{ \"message\": \"%s\", \"temp_tc\": %.1f, \"temp_amb\": %.1f, \"humid_amb\": %.0f,\"alarm_temp_min\": %.1f, \"alarm_temp_max\": %.1f }",
+ 						"equipment alarm clear", temp_tc, temp_amb,humid_amb,  alarm_temp_min, alarm_temp_max);
+				Particle.publish("ALARM", data, PRIVATE);
 			}
 
 		}
@@ -228,11 +232,15 @@ void loop() {
 
 		if (usb_power != usb_power_last) {
 			if (usb_power){
-				Particle.publish("ALARM_POWER", "CLEAR: Monitor external power restored.", PRIVATE);
+				String data = String::format("{ \"message\": \"%s\", \"temp_tc\": %.1f, \"temp_amb\": %.1f, \"humid_amb\": %.0f,\"alarm_temp_min\": %.1f, \"alarm_temp_max\": %.1f }",
+ 						"usb power restored", temp_tc, temp_amb,humid_amb,  alarm_temp_min, alarm_temp_max);
+				Particle.publish("ALARM", data, PRIVATE);
 			}
 			else
 			{
-				Particle.publish("ALARM_POWER", "ALARM: No monitor external power!!!", PRIVATE);
+				String data = String::format("{ \"message\": \"%s\", \"temp_tc\": %.1f, \"temp_amb\": %.1f, \"humid_amb\": %.0f,\"alarm_temp_min\": %.1f, \"alarm_temp_max\": %.1f }",
+						"no usb power", temp_tc, temp_amb, humid_amb, alarm_temp_min, alarm_temp_max);
+				Particle.publish("ALARM", data, PRIVATE);
 			}
 			usb_power_last = usb_power;
 		}
@@ -296,11 +304,15 @@ void loop() {
 
 		if ( low_t_alarm != low_t_alarm_last ){
 			if (low_t_alarm){
-				Particle.publish("ALARM_TEMP", "ALARM: Internal temperature below minimum.", PRIVATE);
+				String data = String::format("{ \"message\": \"%s\", \"temp_tc\": %.1f, \"temp_amb\": %.1f, \"humid_amb\": %.0f,\"alarm_temp_min\": %.1f, \"alarm_temp_max\": %.1f }",
+						"internal temperature below minimum", temp_tc, temp_amb,humid_amb,  alarm_temp_min, alarm_temp_max);
+				Particle.publish("ALARM", data, PRIVATE);
 			}
 			else
 			{
-				Particle.publish("ALARM_TEMP", "CLEAR: Internal temperature no longer below minimum.", PRIVATE);
+				String data = String::format("{ \"message\": \"%s\", \"temp_tc\": %.1f, \"temp_amb\": %.1f, \"humid_amb\": %.0f,\"alarm_temp_min\": %.1f, \"alarm_temp_max\": %.1f }",
+						"internal temperature no longer below minimum", temp_tc, temp_amb, humid_amb, alarm_temp_min, alarm_temp_max);
+				Particle.publish("ALARM", data, PRIVATE);
 			}
 			low_t_alarm_last = low_t_alarm;
 		}
@@ -314,11 +326,15 @@ void loop() {
 
 		if ( high_t_alarm != high_t_alarm_last ){
 			if (high_t_alarm){
-				Particle.publish("ALARM_TEMP", "ALARM: Internal temperature above maximum.", PRIVATE);
+				String data = String::format("{ \"message\": \"%s\", \"temp_tc\": %.1f, \"temp_amb\": %.1f, \"humid_amb\": %.0f,\"alarm_temp_min\": %.1f, \"alarm_temp_max\": %.1f }",
+						"internal temperature above maximum", temp_tc, temp_amb,humid_amb,  alarm_temp_min, alarm_temp_max);
+				Particle.publish("ALARM", data, PRIVATE);
 			}
 			else
 			{
-				Particle.publish("ALARM_TEMP", "CLEAR: Internal temperature no longer above maximum.", PRIVATE);
+				String data = String::format("{ \"message\": \"%s\", \"temp_tc\": %.1f, \"temp_amb\": %.1f, \"humid_amb\": %.0f,\"alarm_temp_min\": %.1f, \"alarm_temp_max\": %.1f }",
+						"internal temperature no longer above maximum", temp_tc, temp_amb, humid_amb, alarm_temp_min, alarm_temp_max);
+				Particle.publish("ALARM", data, PRIVATE);
 			}
 			high_t_alarm_last = high_t_alarm;
 		}
@@ -332,11 +348,15 @@ void loop() {
 
 		if ( amb_t_alarm != amb_t_alarm_last ){
 			if (amb_t_alarm){
-				Particle.publish("ALARM_AMB", "ALARM: Ambient temperature above maximum.", PRIVATE);
+				String data = String::format("{ \"message\": \"%s\", \"temp_tc\": %.1f, \"temp_amb\": %.1f, \"humid_amb\": %.0f,\"alarm_temp_min\": %.1f, \"alarm_temp_max\": %.1f }",
+						"ambient temperature above maximum", temp_tc, temp_amb,humid_amb,  alarm_temp_min, alarm_temp_max);
+				Particle.publish("ALARM", data, PRIVATE);
 			}
 			else
 			{
-				Particle.publish("ALARM_AMB", "CLEAR: Ambient temperature no longer above maximum.", PRIVATE);
+				String data = String::format("{ \"message\": \"%s\", \"temp_tc\": %.1f, \"temp_amb\": %.1f, \"humid_amb\": %.0f,\"alarm_temp_min\": %.1f, \"alarm_temp_max\": %.1f }",
+						"ambient temperature no longer above maximum", temp_tc, temp_amb, humid_amb, alarm_temp_min, alarm_temp_max);
+				Particle.publish("ALARM", data, PRIVATE);
 			}
 			amb_t_alarm_last = amb_t_alarm;
 		}
@@ -350,11 +370,15 @@ void loop() {
 
 		if ( amb_h_alarm != amb_h_alarm_last ){
 			if (amb_t_alarm){
-				Particle.publish("ALARM_AMB", "ALARM: Ambient humidity above maximum.", PRIVATE);
+				String data = String::format("{ \"message\": \"%s\", \"temp_tc\": %.1f, \"temp_amb\": %.1f, \"humid_amb\": %.0f,\"alarm_temp_min\": %.1f, \"alarm_temp_max\": %.1f }",
+						"ambient humidity above maximum", temp_tc, temp_amb,humid_amb,  alarm_temp_min, alarm_temp_max);
+				Particle.publish("ALARM", data, PRIVATE);
 			}
 			else
 			{
-				Particle.publish("ALARM_AMB", "CLEAR: Ambient humidity no longer above maximum.", PRIVATE);
+				String data = String::format("{ \"message\": \"%s\", \"temp_tc\": %.1f, \"temp_amb\": %.1f, \"humid_amb\": %.0f,\"alarm_temp_min\": %.1f, \"alarm_temp_max\": %.1f }",
+						"ambient humidity no longer above maximum", temp_tc, temp_amb,humid_amb,  alarm_temp_min, alarm_temp_max);
+				Particle.publish("ALARM", data, PRIVATE);
 			}
 			amb_h_alarm_last = amb_h_alarm;
 		}
