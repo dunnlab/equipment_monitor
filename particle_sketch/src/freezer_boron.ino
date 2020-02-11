@@ -11,10 +11,10 @@
 //		- Connect to i2c bus and DISPLAY_RESET
 //
 // https://www.adafruit.com/product/2652 BME280 I2C or SPI Temperature Humidity Pressure Sensor[ID:2652]
-// 		- Connect to SPI pins
+//		- Connect to SPI pins
 //
 // https://www.adafruit.com/product/3263 Universal Thermocouple Amplifier MAX31856
-// 		- Connect to i2c bus
+//		- Connect to i2c bus
 //
 
 
@@ -54,6 +54,7 @@ int led_on_state = 0;
 // 1 Boron
 // 2 Not Boron
 int board_type = 0;
+char board_name[21];
 
 double temp_tc = 0;
 double temp_tc_cj = 0;
@@ -67,7 +68,7 @@ double batt_percent = 0;
 bool usb_power_last = FALSE;
 bool usb_power = TRUE;
 
-bool equip_spec = FALSE;
+bool equip_spec = TRUE;
 double alarm_temp_min;
 double alarm_temp_max;
 bool low_t_alarm = FALSE;
@@ -86,6 +87,8 @@ bool fault_bme = FALSE;
 uint8_t fault_thermocouple = 0;
 bool BMEsensorReady = FALSE;
 
+// formatting for JSON payload
+char const *json_out_fmt = "{ \"message\": \"%s\", \"board_name\": \"%s\", \"temp_tc\": %.1f, \"temp_amb\": %.1f, \"humid_amb\": %.0f,\"alarm_temp_min\": %.1f, \"alarm_temp_max\": %.1f }";
 
 // Use software SPI: CS, DI, DO, CLK
 // Pin labels are CS, SDI, SDO, SCK
@@ -122,11 +125,19 @@ void selectExternalMeshAntenna() {
 	#endif
 }
 
+void name_handler(const char *topic, const char *data) {
+	strncpy(board_name, data, sizeof(board_name));
+}
 
 void setup() {
 
 	selectExternalMeshAntenna();
+	Particle.subscribe( "particle/device/name", name_handler, MY_DEVICES);
+	// wait so we know our name
+	waitUntil(Particle.connected);
+	Particle.publish("particle/device/name", PRIVATE);
 
+	Particle.variable( "board_name", board_name , STRING );
 	Particle.variable( "temp_tc", &temp_tc, DOUBLE );
 	Particle.variable( "temp_tc_cj", &temp_tc_cj, DOUBLE );
 	Particle.variable( "temp_amb", &temp_amb, DOUBLE );
@@ -187,35 +198,35 @@ void setup() {
 }
 
 void loop() {
+	waitUntil(Particle.connected);
 	if (millis() - lastUpdate >= UPDATE_PERIOD_MS) {
 		// alternate the LED between high and low
 		// to show that we're still alive
 		digitalWrite(LED_A, (led_on_state) ? HIGH : LOW);
 		led_on_state = !led_on_state;
 
-
 		// Check equipment alarms
 		if( (digitalRead(ALARM_NC_PIN) == HIGH) or (digitalRead(ALARM_NO_PIN) == LOW) )
 		{
 			equip_alarm = TRUE;
+			digitalWrite(LED_B, HIGH);
 		}
 		else
 		{
 			equip_alarm = FALSE;
+			digitalWrite(LED_B, LOW);
 		}
 
 		if( equip_alarm != equip_alarm_last ){
 			equip_alarm_last = equip_alarm;
 			if ( equip_alarm ){
-				String data = String::format("{ \"message\": \"%s\", \"temp_tc\": %.1f, \"temp_amb\": %.1f, \"humid_amb\": %.0f,\"alarm_temp_min\": %.1f, \"alarm_temp_max\": %.1f }",
- 						"equipment alarm", temp_tc, temp_amb, humid_amb, alarm_temp_min, alarm_temp_max);
-				Particle.publish("ALARM", data, PRIVATE);
+				String json_payload = String::format(json_out_fmt, "equipment alarm", board_name, temp_tc, temp_amb, humid_amb, alarm_temp_min, alarm_temp_max);
+				Particle.publish("ALARM", json_payload, PRIVATE);
 			}
 			else
 			{
-				String data = String::format("{ \"message\": \"%s\", \"temp_tc\": %.1f, \"temp_amb\": %.1f, \"humid_amb\": %.0f,\"alarm_temp_min\": %.1f, \"alarm_temp_max\": %.1f }",
- 						"equipment alarm clear", temp_tc, temp_amb,humid_amb,  alarm_temp_min, alarm_temp_max);
-				Particle.publish("ALARM", data, PRIVATE);
+				String json_payload = String::format(json_out_fmt, "equipment alarm clear", board_name, temp_tc, temp_amb, humid_amb, alarm_temp_min, alarm_temp_max);
+				Particle.publish("CLEAR", json_payload, PRIVATE);
 			}
 
 		}
@@ -232,19 +243,16 @@ void loop() {
 
 		if (usb_power != usb_power_last) {
 			if (usb_power){
-				String data = String::format("{ \"message\": \"%s\", \"temp_tc\": %.1f, \"temp_amb\": %.1f, \"humid_amb\": %.0f,\"alarm_temp_min\": %.1f, \"alarm_temp_max\": %.1f }",
- 						"usb power restored", temp_tc, temp_amb,humid_amb,  alarm_temp_min, alarm_temp_max);
-				Particle.publish("ALARM", data, PRIVATE);
+				String json_payload = String::format(json_out_fmt, "usb power restored", board_name, temp_tc, temp_amb, humid_amb, alarm_temp_min, alarm_temp_max);
+				Particle.publish("CLEAR", json_payload, PRIVATE);
 			}
 			else
 			{
-				String data = String::format("{ \"message\": \"%s\", \"temp_tc\": %.1f, \"temp_amb\": %.1f, \"humid_amb\": %.0f,\"alarm_temp_min\": %.1f, \"alarm_temp_max\": %.1f }",
-						"no usb power", temp_tc, temp_amb, humid_amb, alarm_temp_min, alarm_temp_max);
-				Particle.publish("ALARM", data, PRIVATE);
+				String json_payload = String::format(json_out_fmt, "no usb power", board_name, temp_tc, temp_amb, humid_amb, alarm_temp_min, alarm_temp_max);
+				Particle.publish("ALARM", json_payload, PRIVATE);
 			}
 			usb_power_last = usb_power;
 		}
-
 
 		// Read Ambient data
 		// Reading temperature or humidity takes about 250 milliseconds
@@ -256,12 +264,14 @@ void loop() {
 		// Check if any reads failed
 		fault_bme = FALSE;
 		if (isnan(temp_amb)) {
-			Particle.publish("FAULT_BME", "Failed to read from DHT sensor temperature.", PRIVATE);
+			String json_payload = String::format(json_out_fmt, "failed to read from DHT sensor temperature", board_name, temp_tc, temp_amb, humid_amb, alarm_temp_min, alarm_temp_max);
+				Particle.publish("WARN", json_payload, PRIVATE);
 			fault_bme = TRUE;
 		}
 
 		if (isnan(humid_amb)) {
-			Particle.publish("FAULT_BME", "Failed to read from DHT sensor humidity.", PRIVATE);
+			String json_payload = String::format(json_out_fmt, "failed to read from DHT sensor humidity", board_name, temp_tc, temp_amb, humid_amb, alarm_temp_min, alarm_temp_max);
+				Particle.publish("WARN", json_payload, PRIVATE);
 			fault_bme = TRUE;
 		}
 
@@ -274,14 +284,38 @@ void loop() {
 		if ( current_fault ) {
 
 			if( fault_thermocouple != current_fault ){ // Only publish the fault when it differs from previous fault state
-				if (current_fault & MAX31856_FAULT_CJRANGE) Particle.publish("FAULT_Thermo", "Cold Junction Range Fault", PRIVATE);
-				if (current_fault & MAX31856_FAULT_TCRANGE) Particle.publish("FAULT_Thermo", "Thermocouple Range Fault", PRIVATE);
-				if (current_fault & MAX31856_FAULT_CJHIGH)  Particle.publish("FAULT_Thermo", "Cold Junction High Fault", PRIVATE);
-				if (current_fault & MAX31856_FAULT_CJLOW)   Particle.publish("FAULT_Thermo", "Cold Junction Low Fault", PRIVATE);
-				if (current_fault & MAX31856_FAULT_TCHIGH)  Particle.publish("FAULT_Thermo", "Thermocouple High Fault", PRIVATE);
-				if (current_fault & MAX31856_FAULT_TCLOW)   Particle.publish("FAULT_Thermo", "Thermocouple Low Fault", PRIVATE);
-				if (current_fault & MAX31856_FAULT_OVUV)    Particle.publish("FAULT_Thermo", "Over/Under Voltage Fault", PRIVATE);
-				if (current_fault & MAX31856_FAULT_OPEN)    Particle.publish("FAULT_Thermo", "Thermocouple Open Fault", PRIVATE);
+				if (current_fault & MAX31856_FAULT_CJRANGE) {
+					String json_payload = String::format(json_out_fmt, "Cold Junction Range Fault", board_name, temp_tc, temp_amb, humid_amb, alarm_temp_min, alarm_temp_max);
+					Particle.publish("WARN", json_payload, PRIVATE);
+				}
+				if (current_fault & MAX31856_FAULT_TCRANGE) {
+					String json_payload = String::format(json_out_fmt, "Thermocouple Range Fault", board_name, temp_tc, temp_amb, humid_amb, alarm_temp_min, alarm_temp_max);
+					Particle.publish("WARN", json_payload, PRIVATE);
+				}
+				if (current_fault & MAX31856_FAULT_CJHIGH)  {
+					String json_payload = String::format(json_out_fmt, "Cold Junction High Fault", board_name, temp_tc, temp_amb, humid_amb, alarm_temp_min, alarm_temp_max);
+					Particle.publish("WARN", json_payload, PRIVATE);
+				}
+				if (current_fault & MAX31856_FAULT_CJLOW)   {
+					String json_payload = String::format(json_out_fmt, "Cold Junction Low Fault", board_name, temp_tc, temp_amb, humid_amb, alarm_temp_min, alarm_temp_max);
+					Particle.publish("WARN", json_payload, PRIVATE);
+				}
+				if (current_fault & MAX31856_FAULT_TCHIGH)  {
+					String json_payload = String::format(json_out_fmt, "Thermocouple High Fault", board_name, temp_tc, temp_amb, humid_amb, alarm_temp_min, alarm_temp_max);
+					Particle.publish("WARN", json_payload, PRIVATE);
+				}
+				if (current_fault & MAX31856_FAULT_TCLOW)   {
+					String json_payload = String::format(json_out_fmt, "Thermocouple Low Fault", board_name, temp_tc, temp_amb, humid_amb, alarm_temp_min, alarm_temp_max);
+					Particle.publish("WARN", json_payload, PRIVATE);
+				}
+				if (current_fault & MAX31856_FAULT_OVUV)    {
+					String json_payload = String::format(json_out_fmt, "Over/Under Voltage Fault", board_name, temp_tc, temp_amb, humid_amb, alarm_temp_min, alarm_temp_max);
+					Particle.publish("WARN", json_payload, PRIVATE);
+				}
+				if (current_fault & MAX31856_FAULT_OPEN)    {
+					String json_payload = String::format(json_out_fmt, "Thermocouple Open Fault", board_name, temp_tc, temp_amb, humid_amb, alarm_temp_min, alarm_temp_max);
+					Particle.publish("WARN", json_payload, PRIVATE);
+				}
 			}
 
 			fault_thermocouple = current_fault;
@@ -290,7 +324,8 @@ void loop() {
 		else{
 			if( fault_thermocouple != current_fault ){
 				// Has gone from fault to no fault
-				Particle.publish("FAULT_Thermo", "No Thermocouple Fault", PRIVATE);
+				String json_payload = String::format(json_out_fmt, "Thermocouple Fault(s) cleared", board_name, temp_tc, temp_amb, humid_amb, alarm_temp_min, alarm_temp_max);
+				Particle.publish("WARN", json_payload, PRIVATE);
 				fault_thermocouple = current_fault;
 			}
 		}
@@ -304,15 +339,13 @@ void loop() {
 
 		if ( low_t_alarm != low_t_alarm_last ){
 			if (low_t_alarm){
-				String data = String::format("{ \"message\": \"%s\", \"temp_tc\": %.1f, \"temp_amb\": %.1f, \"humid_amb\": %.0f,\"alarm_temp_min\": %.1f, \"alarm_temp_max\": %.1f }",
-						"internal temperature below minimum", temp_tc, temp_amb,humid_amb,  alarm_temp_min, alarm_temp_max);
-				Particle.publish("ALARM", data, PRIVATE);
+				String json_payload = String::format(json_out_fmt, "internal temperature below minimum", board_name, temp_tc, temp_amb, humid_amb, alarm_temp_min, alarm_temp_max);
+				Particle.publish("INFO", json_payload, PRIVATE);
 			}
 			else
 			{
-				String data = String::format("{ \"message\": \"%s\", \"temp_tc\": %.1f, \"temp_amb\": %.1f, \"humid_amb\": %.0f,\"alarm_temp_min\": %.1f, \"alarm_temp_max\": %.1f }",
-						"internal temperature no longer below minimum", temp_tc, temp_amb, humid_amb, alarm_temp_min, alarm_temp_max);
-				Particle.publish("ALARM", data, PRIVATE);
+				String json_payload = String::format(json_out_fmt, "internal temperature no longer below minimum", board_name, temp_tc, temp_amb, humid_amb, alarm_temp_min, alarm_temp_max);
+				Particle.publish("INFO", json_payload, PRIVATE);
 			}
 			low_t_alarm_last = low_t_alarm;
 		}
@@ -326,15 +359,13 @@ void loop() {
 
 		if ( high_t_alarm != high_t_alarm_last ){
 			if (high_t_alarm){
-				String data = String::format("{ \"message\": \"%s\", \"temp_tc\": %.1f, \"temp_amb\": %.1f, \"humid_amb\": %.0f,\"alarm_temp_min\": %.1f, \"alarm_temp_max\": %.1f }",
-						"internal temperature above maximum", temp_tc, temp_amb,humid_amb,  alarm_temp_min, alarm_temp_max);
-				Particle.publish("ALARM", data, PRIVATE);
+				String json_payload = String::format(json_out_fmt, "internal temperature above maximum", board_name, temp_tc, temp_amb, humid_amb, alarm_temp_min, alarm_temp_max);
+				Particle.publish("INFO", json_payload, PRIVATE);
 			}
 			else
 			{
-				String data = String::format("{ \"message\": \"%s\", \"temp_tc\": %.1f, \"temp_amb\": %.1f, \"humid_amb\": %.0f,\"alarm_temp_min\": %.1f, \"alarm_temp_max\": %.1f }",
-						"internal temperature no longer above maximum", temp_tc, temp_amb, humid_amb, alarm_temp_min, alarm_temp_max);
-				Particle.publish("ALARM", data, PRIVATE);
+				String json_payload = String::format(json_out_fmt, "internal temperature no longer above maximum", board_name, temp_tc, temp_amb, humid_amb, alarm_temp_min, alarm_temp_max);
+				Particle.publish("INFO", json_payload, PRIVATE);
 			}
 			high_t_alarm_last = high_t_alarm;
 		}
@@ -348,15 +379,13 @@ void loop() {
 
 		if ( amb_t_alarm != amb_t_alarm_last ){
 			if (amb_t_alarm){
-				String data = String::format("{ \"message\": \"%s\", \"temp_tc\": %.1f, \"temp_amb\": %.1f, \"humid_amb\": %.0f,\"alarm_temp_min\": %.1f, \"alarm_temp_max\": %.1f }",
-						"ambient temperature above maximum", temp_tc, temp_amb,humid_amb,  alarm_temp_min, alarm_temp_max);
-				Particle.publish("ALARM", data, PRIVATE);
+				String json_payload = String::format(json_out_fmt, "ambient temperature above maximum", board_name, temp_tc, temp_amb, humid_amb, alarm_temp_min, alarm_temp_max);
+				Particle.publish("INFO", json_payload, PRIVATE);
 			}
 			else
 			{
-				String data = String::format("{ \"message\": \"%s\", \"temp_tc\": %.1f, \"temp_amb\": %.1f, \"humid_amb\": %.0f,\"alarm_temp_min\": %.1f, \"alarm_temp_max\": %.1f }",
-						"ambient temperature no longer above maximum", temp_tc, temp_amb, humid_amb, alarm_temp_min, alarm_temp_max);
-				Particle.publish("ALARM", data, PRIVATE);
+				String json_payload = String::format(json_out_fmt, "ambient temperature no longer above maximum", board_name, temp_tc, temp_amb, humid_amb, alarm_temp_min, alarm_temp_max);
+				Particle.publish("INFO", json_payload, PRIVATE);
 			}
 			amb_t_alarm_last = amb_t_alarm;
 		}
@@ -370,15 +399,13 @@ void loop() {
 
 		if ( amb_h_alarm != amb_h_alarm_last ){
 			if (amb_t_alarm){
-				String data = String::format("{ \"message\": \"%s\", \"temp_tc\": %.1f, \"temp_amb\": %.1f, \"humid_amb\": %.0f,\"alarm_temp_min\": %.1f, \"alarm_temp_max\": %.1f }",
-						"ambient humidity above maximum", temp_tc, temp_amb,humid_amb,  alarm_temp_min, alarm_temp_max);
-				Particle.publish("ALARM", data, PRIVATE);
+				String json_payload = String::format(json_out_fmt, "ambient humidity above maximum", board_name, temp_tc, temp_amb, humid_amb, alarm_temp_min, alarm_temp_max);
+				Particle.publish("INFO", json_payload, PRIVATE);
 			}
 			else
 			{
-				String data = String::format("{ \"message\": \"%s\", \"temp_tc\": %.1f, \"temp_amb\": %.1f, \"humid_amb\": %.0f,\"alarm_temp_min\": %.1f, \"alarm_temp_max\": %.1f }",
-						"ambient humidity no longer above maximum", temp_tc, temp_amb,humid_amb,  alarm_temp_min, alarm_temp_max);
-				Particle.publish("ALARM", data, PRIVATE);
+				String json_payload = String::format(json_out_fmt, "ambient humidity no longer above maximum", board_name, temp_tc, temp_amb, humid_amb, alarm_temp_min, alarm_temp_max);
+				Particle.publish("INFO", json_payload, PRIVATE);
 			}
 			amb_h_alarm_last = amb_h_alarm;
 		}
@@ -390,27 +417,27 @@ void loop() {
 		bool nominal = TRUE;
 
 		if (fault_bme){
-			monitor_status =          "FAULT: Ambient sensor";
+			monitor_status =          "WARN: Ambient sensor";
 		}
 
 		if (fault_thermocouple){
-			monitor_status =          "FAULT: Thermocouple";
+			monitor_status =          "WARN: Thermocouple";
 		}
 
 		if ( abs( temp_tc_cj - temp_amb  ) > 3 ){
-			monitor_status =          "WARN: Temp mismatch";
+			monitor_status =          "INFO: Temp mismatch";
 		}
 
 		if ( amb_h_alarm ){
-			monitor_status =          "ALARM: Ambient humid";
+			monitor_status =          "INFO: Ambient humid";
 		}
 
 		if ( amb_t_alarm ){
-			monitor_status =          "ALARM: Ambient temp";
+			monitor_status =          "INFO: Ambient temp";
 		}
 
 		if ( ! usb_power ){
-			monitor_status =          "FAULT: No power";
+			monitor_status =          "ALARM: No power";
 		}
 
 		if ( equip_alarm ){
@@ -418,11 +445,11 @@ void loop() {
 		}
 
 		if ( low_t_alarm ){
-			monitor_status =          "ALARM: Low temp";
+			monitor_status =          "INFO: Low temp";
 		}
 
 		if ( high_t_alarm ){
-			monitor_status =          "ALARM: High temp";
+			monitor_status =          "INFO: High temp";
 		}
 
 		if ( monitor_status != "System is nominal" ){
@@ -436,11 +463,11 @@ void loop() {
 		display.setTextColor(WHITE);
 		display.invertDisplay(! nominal);
 		display.setCursor(0,0);
+		display.println(board_name);
 		display.println(monitor_status);
 		display.println(String::format("Ambient  Temp: %.1f C", temp_amb));
 		display.println(String::format("Ambient Humid: %.0f %%", humid_amb));
 		display.println("Internal Temp:");
-		display.println("");
 		display.setTextSize(3);
 		display.println(String::format("%.1f C", temp_tc));
 

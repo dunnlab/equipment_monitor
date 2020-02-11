@@ -1,0 +1,6 @@
+{
+  "event": "{{{PARTICLE_EVENT_NAME}}}",
+  "text": "[{{{board_name}}}] :rotating_light: *_{{{PARTICLE_EVENT_NAME}}}: {{{message}}}_* :rotating_light: Equipment Temp: {{{temp_tc}}}C Ambient Temp: {{{temp_amb}}}C Ambient Humidity: {{{humid_amb}}}% (Equipment Temp expected to be between {{{alarm_temp_min}}} and {{{alarm_temp_max}}})",
+  "coreid": "{{{PARTICLE_DEVICE_ID}}}",
+  "published_at": "{{{PARTICLE_PUBLISHED_AT}}}"
+}

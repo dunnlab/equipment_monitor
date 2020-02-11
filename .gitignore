@@ -1,3 +1,4 @@
 .DS_Store
+.vscode
 freezer_photon/src/TOKENS.h
 *.bin
