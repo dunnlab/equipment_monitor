@@ -57,7 +57,7 @@ int led_on_state = 0;
 // 1 Boron
 // 2 Not Boron
 int board_type = 0;
-char board_name[21];
+char board_name[21] = {'\0'};
 
 double temp_tc = 0;
 double temp_tc_cj = 0;
@@ -67,7 +67,7 @@ bool equip_alarm = FALSE;
 bool equip_alarm_last = FALSE;
 FuelGauge fuel; // used in batt_status for borons
 float batt_voltage = 0; // used in batt_status for xenon/argon
-String batt_status = "low";
+char batt_status[16] = {'\0'};
 
 bool usb_power_last = FALSE;
 bool usb_power = TRUE;
@@ -140,7 +140,7 @@ void setup() {
 	Particle.variable( "temp_amb", &temp_amb, DOUBLE );
 	Particle.variable( "humid_amb", &humid_amb, DOUBLE );
 	Particle.variable( "equip_alarm", &equip_alarm, BOOLEAN );
-	Particle.variable( "batt_status", &batt_status, STRING );
+	Particle.variable( "batt_status", batt_status, STRING );
 	Particle.variable( "usb_power", &usb_power, BOOLEAN );
 	Particle.variable( "equip_spec", &equip_spec, BOOLEAN );
 	Particle.variable( "low_t_alarm", &low_t_alarm, BOOLEAN );
@@ -215,33 +215,12 @@ void loop() {
 			digitalWrite(LED_B, LOW);
 		}
 
-		// fire alarm if its state just changed or it continues to be in alarm state
-		if (equip_alarm && ! equip_alarm_last){
-			submit_json_message("ALARM", "equipment alarm");
-			equip_alarm_last = equip_alarm;
-			last_alarm_ms = millis();
-		} else if ( ! equip_alarm && equip_alarm_last){
-			submit_json_message("CLEAR", "equipment alarm clear");
-			equip_alarm_last = equip_alarm;
-			last_alarm_ms = millis();
-		} else if (equip_alarm && millis() - last_alarm_ms >= UPDATE_ALARM_MS){
-			submit_json_message("ALARM", "equipment still in alarm");
-			last_alarm_ms = millis();
-		}
-
+		alarm_again(equip_alarm, equip_alarm_last, "equipment alarm", "equipment alarm clear", "equipment still in alarm");
 
 		// Power state
 		set_batt_status();
 		usb_power = is_usb_powered();
-
-		if (usb_power != usb_power_last) {
-			if (usb_power){
-				submit_json_message("CLEAR", "usb power restored");
-			} else {
-				submit_json_message("ALARM", "no usb power");
-			}
-			usb_power_last = usb_power;
-		}
+		alarm_again(usb_power, usb_power_last, "no usb power", "usb power restored", "still no usb power");
 
 		// Read Ambient data
 		// Reading temperature or humidity takes about 250 milliseconds
@@ -439,6 +418,22 @@ void loop() {
 }
 
 
+void alarm_again(bool & alarm, bool & alarm_last, const char* alarm_msg, const char* clear_msg, const char* still_alarm_msg){
+	// fire alarm if its state just changed or if there continue to be alarms
+	if (alarm && ! alarm_last){
+		submit_json_message("ALARM", alarm_msg);
+		alarm_last = alarm;
+		last_alarm_ms = millis();
+	} else if ( ! alarm && alarm_last){
+		submit_json_message("CLEAR", clear_msg);
+		alarm_last = alarm;
+		last_alarm_ms = millis();
+	} else if (alarm && millis() - last_alarm_ms >= UPDATE_ALARM_MS){
+		submit_json_message("ALARM", still_alarm_msg);
+		last_alarm_ms = millis();
+	}
+}
+
 // EEPROM handlers
 // These allow for non-volatile storage of board-specific settings
 // EEPROM that has not been written will have a value of 0xFFFFFFFF,
@@ -497,10 +492,14 @@ int clear_eeprom( String extra ){
 }
 
 bool submit_json_message(const char* msg_type, const char* message){
-	// formatting for JSON payload, which makes these variables available from particle webhooks
-	String json_payload = String::format( "{ \"message\": \"%s\", \"board_name\": \"%s\", \"temp_tc\": %.1f, \"temp_amb\": %.1f, \"humid_amb\": %.0f,\"alarm_temp_min\": %.1f, \"alarm_temp_max\": %.1f }", 
-										message, board_name, temp_tc, temp_amb, humid_amb, alarm_temp_min, alarm_temp_max );
-	return( Particle.publish(msg_type, json_payload, PRIVATE) );
+		// formatting for JSON payload, which makes these variables available from particle webhooks
+		if (board_name[0] != '\0'){
+			String json_payload = String::format( "{ \"message\": \"%s\", \"board_name\": \"%s\", \"batt_status\": \"%s\", \"temp_tc\": %.1f, \"temp_amb\": %.1f, \"humid_amb\": %.0f,\"alarm_temp_min\": %.1f, \"alarm_temp_max\": %.1f }", 
+												message, board_name, batt_status, temp_tc, temp_amb, humid_amb, alarm_temp_min, alarm_temp_max );
+			return( Particle.publish(msg_type, json_payload, PRIVATE) );
+		} else {
+			return(FALSE);
+		}
 }
 
 // Xenon and Boron do power management and status checks differently
@@ -509,7 +508,9 @@ bool submit_json_message(const char* msg_type, const char* message){
 
 #if (PLATFORM_ID == PLATFORM_BORON)
 void set_batt_status() {
-	batt_status = String::format( "%.0f%%", fuel.getSoC());
+	char percent="%"
+	gcvt(fuel.getSoC(), 3, batt_status);
+	strncat(batt_status, &percent, 1);
 }
 
 bool is_usb_powered() {
@@ -532,14 +533,15 @@ void set_batt_status() {
 	// 4.2V max, particle limits to 4.11V?
 	// 3.6V nominal
 	// 2.8–3.0V end of discharge
+	
 	if (batt_voltage > 3.6){
-		batt_status = "Excellent";
+		strncpy(batt_status, "excellent", 9);
 	} else if (batt_voltage > 3.4){
-		batt_status = "Good";
+		strncpy(batt_status, "good", 4);
 	} else if (batt_voltage > 3.0){
-		batt_status = "Low";
+		strncpy(batt_status, "low", 3);
 	} else {
-		batt_status = "Dead/Not Found";
+		strncpy(batt_status, "dead/not found", 14);
 	}
 }
 
