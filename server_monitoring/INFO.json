@@ -1,6 +1,6 @@
 {
   "event": "{{{PARTICLE_EVENT_NAME}}}",
-  "text": ":information_source:[{{{board_name}}}] *_{{{PARTICLE_EVENT_NAME}}}: {{{message}}}_* \nEquipment Temp: {{{temp_tc}}}°C\nAmbient Temp: {{{temp_amb}}}°C\nAmbient Humidity: {{{humid_amb}}}%",
+  "text": ":information_source:[{{{board_name}}}] *_{{{PARTICLE_EVENT_NAME}}}: {{{message}}}_*\nBattery Level: {{{batt_status}}}\nEquiipment Temp: {{{temp_tc}}}°C\nAmbient Temp: {{{temp_amb}}}°C\nAmbient Humidity: {{{humid_amb}}}%",
   "coreid": "{{{PARTICLE_DEVICE_ID}}}",
   "published_at": "{{{PARTICLE_PUBLISHED_AT}}}"
 }
