@@ -46,7 +46,7 @@ SYSTEM_THREAD(ENABLED);
 
 // public variables
 const unsigned long UPDATE_PERIOD_MS = 5000;
-unsigned long lastUpdate = 0;
+unsigned long last_update = 0;
 int led_on_state = 0;
 
 // Define board type
@@ -194,8 +194,7 @@ void setup() {
 }
 
 void loop() {
-	waitUntil(Particle.connected);
-	if (millis() - lastUpdate >= UPDATE_PERIOD_MS) {
+	if (millis() - last_update >= UPDATE_PERIOD_MS) {
 		// alternate the LED between high and low
 		// to show that we're still alive
 		digitalWrite(LED_A, (led_on_state) ? HIGH : LOW);
@@ -425,7 +424,7 @@ void loop() {
 		display.println(String::format("%.1f C", temp_tc));
 
 		display.display();
-
+	last_update = millis();
 	}
 }
 
