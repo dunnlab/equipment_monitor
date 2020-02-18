@@ -87,9 +87,6 @@ bool fault_bme = FALSE;
 uint8_t fault_thermocouple = 0;
 bool BMEsensorReady = FALSE;
 
-// formatting for JSON payload
-char const *json_out_fmt = "{ \"message\": \"%s\", \"board_name\": \"%s\", \"temp_tc\": %.1f, \"temp_amb\": %.1f, \"humid_amb\": %.0f,\"alarm_temp_min\": %.1f, \"alarm_temp_max\": %.1f }";
-
 // Use software SPI: CS, DI, DO, CLK
 // Pin labels are CS, SDI, SDO, SCK
 // formal labels: SS, MISO, MOSI, SCLK
@@ -172,7 +169,7 @@ void setup() {
 	BMEsensorReady = bme.begin();
 
 	if ( ! BMEsensorReady ){
-		Particle.publish("FAULT_BME", "BME sensor is not ready", PRIVATE);
+		submit_json_message("FAULT_BME", "BME sensor is not ready");
 		fault_bme = TRUE;
 	}
 
@@ -182,19 +179,18 @@ void setup() {
 	// Publish some hardware stuff
 	#if (PLATFORM_ID == PLATFORM_BORON)
 
-	Particle.publish("Power_stat", String(DiagnosticsHelper::getValue(DIAG_ID_SYSTEM_POWER_SOURCE)), PRIVATE);
+	submit_json_message("Power_stat", String(DiagnosticsHelper::getValue(DIAG_ID_SYSTEM_POWER_SOURCE)));
 	board_type = 1;
 
 	#else
 	pinMode(PWR, INPUT);
-	Particle.publish("Power_CHG", String(digitalRead(CHG)), PRIVATE);
-	Particle.publish("Power_PWR", String(digitalRead(PWR)), PRIVATE);
+	submit_json_message("Power_CHG", String(digitalRead(CHG)));
+	submit_json_message("Power_PWR", String(digitalRead(PWR)));
 	board_type = 2;
 
 	#endif
 
-	Particle.publish("BOARD", String(board_type), PRIVATE);
-
+	submit_json_message("BOARD", String(board_type));
 }
 
 void loop() {
@@ -210,9 +206,7 @@ void loop() {
 		{
 			equip_alarm = TRUE;
 			digitalWrite(LED_B, HIGH);
-		}
-		else
-		{
+		} else {
 			equip_alarm = FALSE;
 			digitalWrite(LED_B, LOW);
 		}
@@ -220,36 +214,22 @@ void loop() {
 		if( equip_alarm != equip_alarm_last ){
 			equip_alarm_last = equip_alarm;
 			if ( equip_alarm ){
-				String json_payload = String::format(json_out_fmt, "equipment alarm", board_name, temp_tc, temp_amb, humid_amb, alarm_temp_min, alarm_temp_max);
-				Particle.publish("ALARM", json_payload, PRIVATE);
+				submit_json_message("ALARM", "equipment alarm");
+			} else {
+				submit_json_message("CLEAR", "equipment alarm clear");
 			}
-			else
-			{
-				String json_payload = String::format(json_out_fmt, "equipment alarm clear", board_name, temp_tc, temp_amb, humid_amb, alarm_temp_min, alarm_temp_max);
-				Particle.publish("CLEAR", json_payload, PRIVATE);
-			}
-
 		}
 
-		// Particle.publish("equip_alarm", String(equip_alarm), PRIVATE);
 
 		// Power state
 		batt_percent = fuel.getSoC();
-		// Particle.publish("batt_percent", String(batt_percent), PRIVATE);
-
 		usb_power = isUsbPowered();
-		//Particle.publish("usb_power", String(usb_power), PRIVATE);
-		//Particle.publish("byte_power", String(pmic.getSystemStatus()), PRIVATE);
 
 		if (usb_power != usb_power_last) {
 			if (usb_power){
-				String json_payload = String::format(json_out_fmt, "usb power restored", board_name, temp_tc, temp_amb, humid_amb, alarm_temp_min, alarm_temp_max);
-				Particle.publish("CLEAR", json_payload, PRIVATE);
-			}
-			else
-			{
-				String json_payload = String::format(json_out_fmt, "no usb power", board_name, temp_tc, temp_amb, humid_amb, alarm_temp_min, alarm_temp_max);
-				Particle.publish("ALARM", json_payload, PRIVATE);
+				submit_json_message("CLEAR", "usb power restored");
+			} else {
+				submit_json_message("ALARM", "no usb power");
 			}
 			usb_power_last = usb_power;
 		}
@@ -264,14 +244,12 @@ void loop() {
 		// Check if any reads failed
 		fault_bme = FALSE;
 		if (isnan(temp_amb)) {
-			String json_payload = String::format(json_out_fmt, "failed to read from DHT sensor temperature", board_name, temp_tc, temp_amb, humid_amb, alarm_temp_min, alarm_temp_max);
-				Particle.publish("WARN", json_payload, PRIVATE);
+				submit_json_message("WARN", "failed to read from DHT sensor temperature");
 			fault_bme = TRUE;
 		}
 
 		if (isnan(humid_amb)) {
-			String json_payload = String::format(json_out_fmt, "failed to read from DHT sensor humidity", board_name, temp_tc, temp_amb, humid_amb, alarm_temp_min, alarm_temp_max);
-				Particle.publish("WARN", json_payload, PRIVATE);
+				submit_json_message("WARN", "failed to read from DHT sensor humidity");
 			fault_bme = TRUE;
 		}
 
@@ -285,47 +263,37 @@ void loop() {
 
 			if( fault_thermocouple != current_fault ){ // Only publish the fault when it differs from previous fault state
 				if (current_fault & MAX31856_FAULT_CJRANGE) {
-					String json_payload = String::format(json_out_fmt, "Cold Junction Range Fault", board_name, temp_tc, temp_amb, humid_amb, alarm_temp_min, alarm_temp_max);
-					Particle.publish("WARN", json_payload, PRIVATE);
+					submit_json_message("WARN", "cold junction range fault");
 				}
 				if (current_fault & MAX31856_FAULT_TCRANGE) {
-					String json_payload = String::format(json_out_fmt, "Thermocouple Range Fault", board_name, temp_tc, temp_amb, humid_amb, alarm_temp_min, alarm_temp_max);
-					Particle.publish("WARN", json_payload, PRIVATE);
+					submit_json_message("WARN", "thermocouple range fault");
 				}
 				if (current_fault & MAX31856_FAULT_CJHIGH)  {
-					String json_payload = String::format(json_out_fmt, "Cold Junction High Fault", board_name, temp_tc, temp_amb, humid_amb, alarm_temp_min, alarm_temp_max);
-					Particle.publish("WARN", json_payload, PRIVATE);
+					submit_json_message("WARN", "cold junction high fault");
 				}
 				if (current_fault & MAX31856_FAULT_CJLOW)   {
-					String json_payload = String::format(json_out_fmt, "Cold Junction Low Fault", board_name, temp_tc, temp_amb, humid_amb, alarm_temp_min, alarm_temp_max);
-					Particle.publish("WARN", json_payload, PRIVATE);
+					submit_json_message("WARN", "cold junction low fault");
 				}
 				if (current_fault & MAX31856_FAULT_TCHIGH)  {
-					String json_payload = String::format(json_out_fmt, "Thermocouple High Fault", board_name, temp_tc, temp_amb, humid_amb, alarm_temp_min, alarm_temp_max);
-					Particle.publish("WARN", json_payload, PRIVATE);
+					submit_json_message("WARN", "thermocouple high fault");
 				}
 				if (current_fault & MAX31856_FAULT_TCLOW)   {
-					String json_payload = String::format(json_out_fmt, "Thermocouple Low Fault", board_name, temp_tc, temp_amb, humid_amb, alarm_temp_min, alarm_temp_max);
-					Particle.publish("WARN", json_payload, PRIVATE);
+					submit_json_message("WARN", "thermocouple low fault");
 				}
 				if (current_fault & MAX31856_FAULT_OVUV)    {
-					String json_payload = String::format(json_out_fmt, "Over/Under Voltage Fault", board_name, temp_tc, temp_amb, humid_amb, alarm_temp_min, alarm_temp_max);
-					Particle.publish("WARN", json_payload, PRIVATE);
+					submit_json_message("WARN", "over/under voltage fault");
 				}
 				if (current_fault & MAX31856_FAULT_OPEN)    {
-					String json_payload = String::format(json_out_fmt, "Thermocouple Open Fault", board_name, temp_tc, temp_amb, humid_amb, alarm_temp_min, alarm_temp_max);
-					Particle.publish("WARN", json_payload, PRIVATE);
+					submit_json_message("WARN", "thermocouple open fault");
 				}
 			}
 
 			fault_thermocouple = current_fault;
 
-		}
-		else{
+		} else {
 			if( fault_thermocouple != current_fault ){
 				// Has gone from fault to no fault
-				String json_payload = String::format(json_out_fmt, "Thermocouple Fault(s) cleared", board_name, temp_tc, temp_amb, humid_amb, alarm_temp_min, alarm_temp_max);
-				Particle.publish("WARN", json_payload, PRIVATE);
+				submit_json_message("WARN", "thermocouple Fault(s) cleared");
 				fault_thermocouple = current_fault;
 			}
 		}
@@ -333,19 +301,17 @@ void loop() {
 		// Update sensor alarms
 		if ( (temp_tc < alarm_temp_min) && equip_spec && ! fault_thermocouple ){
 			low_t_alarm = TRUE;
-		} else{
+		} else {
 			low_t_alarm = FALSE;
 		}
 
 		if ( low_t_alarm != low_t_alarm_last ){
 			if (low_t_alarm){
-				String json_payload = String::format(json_out_fmt, "internal temperature below minimum", board_name, temp_tc, temp_amb, humid_amb, alarm_temp_min, alarm_temp_max);
-				Particle.publish("INFO", json_payload, PRIVATE);
+				submit_json_message("INFO", "internal temperature below minimum");
 			}
 			else
 			{
-				String json_payload = String::format(json_out_fmt, "internal temperature no longer below minimum", board_name, temp_tc, temp_amb, humid_amb, alarm_temp_min, alarm_temp_max);
-				Particle.publish("INFO", json_payload, PRIVATE);
+				submit_json_message("INFO", "internal temperature no longer below minimum");
 			}
 			low_t_alarm_last = low_t_alarm;
 		}
@@ -353,39 +319,30 @@ void loop() {
 
 		if ( (temp_tc > alarm_temp_max) && equip_spec && ! fault_thermocouple ){
 			high_t_alarm = TRUE;
-		} else{
+		} else {
 			high_t_alarm = FALSE;
 		}
 
 		if ( high_t_alarm != high_t_alarm_last ){
 			if (high_t_alarm){
-				String json_payload = String::format(json_out_fmt, "internal temperature above maximum", board_name, temp_tc, temp_amb, humid_amb, alarm_temp_min, alarm_temp_max);
-				Particle.publish("INFO", json_payload, PRIVATE);
-			}
-			else
-			{
-				String json_payload = String::format(json_out_fmt, "internal temperature no longer above maximum", board_name, temp_tc, temp_amb, humid_amb, alarm_temp_min, alarm_temp_max);
-				Particle.publish("INFO", json_payload, PRIVATE);
+				submit_json_message("INFO", "internal temperature above maximum");
+			} else {
+				submit_json_message("INFO", "internal temperature no longer above maximum");
 			}
 			high_t_alarm_last = high_t_alarm;
 		}
 
-
 		if ( (temp_amb > alarm_ambient_t_max) && ! fault_bme ){
 			amb_t_alarm = TRUE;
-		} else{
+		} else {
 			amb_t_alarm = FALSE;
 		}
 
 		if ( amb_t_alarm != amb_t_alarm_last ){
 			if (amb_t_alarm){
-				String json_payload = String::format(json_out_fmt, "ambient temperature above maximum", board_name, temp_tc, temp_amb, humid_amb, alarm_temp_min, alarm_temp_max);
-				Particle.publish("INFO", json_payload, PRIVATE);
-			}
-			else
-			{
-				String json_payload = String::format(json_out_fmt, "ambient temperature no longer above maximum", board_name, temp_tc, temp_amb, humid_amb, alarm_temp_min, alarm_temp_max);
-				Particle.publish("INFO", json_payload, PRIVATE);
+				submit_json_message("INFO", "ambient temperature above maximum");
+			} else {
+				submit_json_message("INFO", "ambient temperature no longer above maximum");
 			}
 			amb_t_alarm_last = amb_t_alarm;
 		}
@@ -393,19 +350,15 @@ void loop() {
 
 		if ( (humid_amb > alarm_ambient_h_max && ! fault_bme ) ){
 			amb_h_alarm = TRUE;
-		} else{
+		} else {
 			amb_h_alarm = FALSE;
 		}
 
 		if ( amb_h_alarm != amb_h_alarm_last ){
 			if (amb_t_alarm){
-				String json_payload = String::format(json_out_fmt, "ambient humidity above maximum", board_name, temp_tc, temp_amb, humid_amb, alarm_temp_min, alarm_temp_max);
-				Particle.publish("INFO", json_payload, PRIVATE);
-			}
-			else
-			{
-				String json_payload = String::format(json_out_fmt, "ambient humidity no longer above maximum", board_name, temp_tc, temp_amb, humid_amb, alarm_temp_min, alarm_temp_max);
-				Particle.publish("INFO", json_payload, PRIVATE);
+				submit_json_message("INFO", "ambient humidity above maximum");
+			} else {
+				submit_json_message("INFO", "ambient humidity no longer above maximum");
 			}
 			amb_h_alarm_last = amb_h_alarm;
 		}
@@ -506,8 +459,7 @@ int write_alarm_temp_max ( String temp_string ) {
 		// All is well
 		alarm_temp_max = written;
 		return( 0 );
-	}
-	else{
+	} else {
 		// There was a problem
 		return( 1 );
 	}
@@ -524,8 +476,7 @@ int write_alarm_temp_min ( String temp_string ) {
 		// All is well
 		alarm_temp_min = written;
 		return( 0 );
-	}
-	else{
+	} else {
 		// There was a problem
 		return( 1 );
 	}
@@ -536,13 +487,16 @@ int clear_eeprom( String extra ){
 	return(0);
 }
 
-
-
+bool submit_json_message(const char* msg_type, const char* message){
+	// formatting for JSON payload, which makes these variables available from particle webhooks
+	char const *json_out_fmt = "{ \"message\": \"%s\", \"board_name\": \"%s\", \"temp_tc\": %.1f, \"temp_amb\": %.1f, \"humid_amb\": %.0f,\"alarm_temp_min\": %.1f, \"alarm_temp_max\": %.1f }";
+	String json_payload = String::format( json_out_fmt, message, board_name, temp_tc, temp_amb, humid_amb, alarm_temp_min, alarm_temp_max );
+	return( Particle.publish(msg_type, json_payload, PRIVATE) );
+}
 
 // Xenon and Boron do power management and status checks differently
 // Use conditional directives to pick thhe right approachh and compile time
 // See thread at https://community.particle.io/t/battery-charging-indicator-not-working/48345/5
-
 
 #if (PLATFORM_ID == PLATFORM_BORON)
 
@@ -552,8 +506,7 @@ bool isUsbPowered() {
 
 	if ( (powerSource == 5) || (powerSource == 0) ){
 		return( FALSE );
-	}
-	else{
+	} else {
 		return( TRUE );
 	}
 
