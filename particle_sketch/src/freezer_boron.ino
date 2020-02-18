@@ -46,7 +46,10 @@ SYSTEM_THREAD(ENABLED);
 
 // public variables
 const unsigned long UPDATE_PERIOD_MS = 5000;
-unsigned long last_update = 0;
+unsigned long last_update_ms = 0;
+const unsigned long UPDATE_ALARM_MS = 900000000;
+unsigned long last_alarm_ms = 0;
+
 int led_on_state = 0;
 
 // Define board type
@@ -62,8 +65,9 @@ double temp_amb = 0;
 double humid_amb = 0;
 bool equip_alarm = FALSE;
 bool equip_alarm_last = FALSE;
-FuelGauge fuel;
-double batt_percent = 0;
+FuelGauge fuel; // used in batt_status for borons
+float batt_voltage = 0; // used in batt_status for xenon/argon
+String batt_status = "low";
 
 bool usb_power_last = FALSE;
 bool usb_power = TRUE;
@@ -129,10 +133,6 @@ void name_handler(const char *topic, const char *data) {
 void setup() {
 
 	selectExternalMeshAntenna();
-	Particle.subscribe( "particle/device/name", name_handler, MY_DEVICES);
-	// wait so we know our name
-	waitUntil(Particle.connected);
-	Particle.publish("particle/device/name", PRIVATE);
 
 	Particle.variable( "board_name", board_name , STRING );
 	Particle.variable( "temp_tc", &temp_tc, DOUBLE );
@@ -140,7 +140,7 @@ void setup() {
 	Particle.variable( "temp_amb", &temp_amb, DOUBLE );
 	Particle.variable( "humid_amb", &humid_amb, DOUBLE );
 	Particle.variable( "equip_alarm", &equip_alarm, BOOLEAN );
-	Particle.variable( "batt_percent", &batt_percent, DOUBLE );
+	Particle.variable( "batt_status", &batt_status, STRING );
 	Particle.variable( "usb_power", &usb_power, BOOLEAN );
 	Particle.variable( "equip_spec", &equip_spec, BOOLEAN );
 	Particle.variable( "low_t_alarm", &low_t_alarm, BOOLEAN );
@@ -153,6 +153,12 @@ void setup() {
 	Particle.function("clear_eeprom", clear_eeprom);
 	Particle.function("SetAlarmTMax", write_alarm_temp_max);
 	Particle.function("SetAlarmTMin", write_alarm_temp_min);
+
+	Particle.subscribe( "particle/device/name", name_handler, MY_DEVICES);
+	// wait so we know our name
+	waitUntil(Particle.connected);
+	Particle.publish("particle/device/name", PRIVATE);
+	submit_json_message("BOARD", String(board_type));
 
 	pinMode( LED_A, OUTPUT );
 	pinMode( LED_B, OUTPUT );
@@ -190,11 +196,10 @@ void setup() {
 
 	#endif
 
-	submit_json_message("BOARD", String(board_type));
 }
 
 void loop() {
-	if (millis() - last_update >= UPDATE_PERIOD_MS) {
+	if (millis() - last_update_ms >= UPDATE_PERIOD_MS) {
 		// alternate the LED between high and low
 		// to show that we're still alive
 		digitalWrite(LED_A, (led_on_state) ? HIGH : LOW);
@@ -210,19 +215,24 @@ void loop() {
 			digitalWrite(LED_B, LOW);
 		}
 
-		if( equip_alarm != equip_alarm_last ){
+		// fire alarm if its state just changed or it continues to be in alarm state
+		if (equip_alarm && ! equip_alarm_last){
+			submit_json_message("ALARM", "equipment alarm");
 			equip_alarm_last = equip_alarm;
-			if ( equip_alarm ){
-				submit_json_message("ALARM", "equipment alarm");
-			} else {
-				submit_json_message("CLEAR", "equipment alarm clear");
-			}
+			last_alarm_ms = millis();
+		} else if ( ! equip_alarm && equip_alarm_last){
+			submit_json_message("CLEAR", "equipment alarm clear");
+			equip_alarm_last = equip_alarm;
+			last_alarm_ms = millis();
+		} else if (equip_alarm && millis() - last_alarm_ms >= UPDATE_ALARM_MS){
+			submit_json_message("ALARM", "equipment still in alarm");
+			last_alarm_ms = millis();
 		}
 
 
 		// Power state
-		batt_percent = fuel.getSoC();
-		usb_power = isUsbPowered();
+		set_batt_status();
+		usb_power = is_usb_powered();
 
 		if (usb_power != usb_power_last) {
 			if (usb_power){
@@ -243,12 +253,12 @@ void loop() {
 		// Check if any reads failed
 		fault_bme = FALSE;
 		if (isnan(temp_amb)) {
-				submit_json_message("WARN", "failed to read from DHT sensor temperature");
+			submit_json_message("WARN", "failed to read from DHT sensor temperature");
 			fault_bme = TRUE;
 		}
 
 		if (isnan(humid_amb)) {
-				submit_json_message("WARN", "failed to read from DHT sensor humidity");
+			submit_json_message("WARN", "failed to read from DHT sensor humidity");
 			fault_bme = TRUE;
 		}
 
@@ -424,7 +434,7 @@ void loop() {
 		display.println(String::format("%.1f C", temp_tc));
 
 		display.display();
-	last_update = millis();
+	last_update_ms = millis();
 	}
 }
 
@@ -488,8 +498,8 @@ int clear_eeprom( String extra ){
 
 bool submit_json_message(const char* msg_type, const char* message){
 	// formatting for JSON payload, which makes these variables available from particle webhooks
-	char const *json_out_fmt = "{ \"message\": \"%s\", \"board_name\": \"%s\", \"temp_tc\": %.1f, \"temp_amb\": %.1f, \"humid_amb\": %.0f,\"alarm_temp_min\": %.1f, \"alarm_temp_max\": %.1f }";
-	String json_payload = String::format( json_out_fmt, message, board_name, temp_tc, temp_amb, humid_amb, alarm_temp_min, alarm_temp_max );
+	String json_payload = String::format( "{ \"message\": \"%s\", \"board_name\": \"%s\", \"temp_tc\": %.1f, \"temp_amb\": %.1f, \"humid_amb\": %.0f,\"alarm_temp_min\": %.1f, \"alarm_temp_max\": %.1f }", 
+										message, board_name, temp_tc, temp_amb, humid_amb, alarm_temp_min, alarm_temp_max );
 	return( Particle.publish(msg_type, json_payload, PRIVATE) );
 }
 
@@ -498,8 +508,11 @@ bool submit_json_message(const char* msg_type, const char* message){
 // See thread at https://community.particle.io/t/battery-charging-indicator-not-working/48345/5
 
 #if (PLATFORM_ID == PLATFORM_BORON)
+void set_batt_status() {
+	batt_status = String::format( "%.0f%%", fuel.getSoC());
+}
 
-bool isUsbPowered() {
+bool is_usb_powered() {
 	// builds on https://community.particle.io/t/boron-battery-connected/47789/9
 	int powerSource = DiagnosticsHelper::getValue(DIAG_ID_SYSTEM_POWER_SOURCE);
 
@@ -513,7 +526,24 @@ bool isUsbPowered() {
 
 #else
 
-bool isUsbPowered() {
+void set_batt_status() {
+	// no fuel gage on xenon/argon: https://docs.particle.io/reference/device-os/firmware/argon/#battery-voltage
+	batt_voltage = analogRead(BATT) * 0.0011224;
+	// 4.2V max, particle limits to 4.11V?
+	// 3.6V nominal
+	// 2.8–3.0V end of discharge
+	if (batt_voltage > 3.6){
+		batt_status = "Excellent";
+	} else if (batt_voltage > 3.4){
+		batt_status = "Good";
+	} else if (batt_voltage > 3.0){
+		batt_status = "Low";
+	} else {
+		batt_status = "Dead/Not Found";
+	}
+}
+
+bool is_usb_powered() {
 	return( digitalRead(PWR) == HIGH );
 }
 
